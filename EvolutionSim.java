@@ -1,5 +1,3 @@
-package Sprint1;
-
 import java.util.*;
 import java.awt.Point;
 
@@ -20,6 +18,7 @@ public class EvolutionSim {
 
    private List<Double> visionAverages;
    private List<Double> reproAverages;
+   private List<Integer> populationData;
 
    private int nameCounter = 0; // stores the ASCII character for next organism
    private Queue<Character> freeSymbols = new LinkedList<>(); // stores freed ASCII characters to use from dead organisms
@@ -40,6 +39,7 @@ public class EvolutionSim {
 
       visionAverages = new ArrayList<>();
       reproAverages = new ArrayList<>();
+      populationData = new ArrayList<>();
 
       // Initialize World
       for (int y = 0; y < worldSize; y++) {
@@ -138,14 +138,14 @@ public class EvolutionSim {
    // post: runs the entire simulation
    public void start(int days) {
       int qr = 0; // Number of days to quick run
-      boolean displayTicks = true;
+      boolean displayDays = true;
       for (int day = 0; day < days; day++) {
          if (qr == 0) {
-            displayTicks = true;
+            displayDays = true;
             if (askBool("Quick run days?")) {
                qr = askInt("How many days to quick run?");
-               if (!askBool("Display Each Tick?")) {
-                  displayTicks = false;
+               if (!askBool("Display Each Day?")) {
+                  displayDays = false;
                }
             }
          }
@@ -154,11 +154,14 @@ public class EvolutionSim {
             endSim();
             break;
          }
-         if (qr > 0) {
-            runDay(day, false, displayTicks);
+         if (qr > 1) {
+            runDay(day, false, displayDays, false);
             qr--;
+         } else if (qr == 1) {
+            runDay(day, false, true, false);
+            System.out.println("Quick Run Finished");
          } else {
-            runDay(day, true, true);
+            runDay(day, true, true, true);
          }
       }
       endSim();
@@ -166,22 +169,25 @@ public class EvolutionSim {
 
    // pre: day -> current day number, ms -> time to delay per tick, 
    //      manual -> if the user should manually progress through the day,
+   //      display -> whether anything should be displayed
    //      displayTicks -> whether each tick should be displayed
    // post: simulate full day, ticks many times
-   public void runDay(int day, boolean manual, boolean displayTicks) {
-      System.out.println("Day " + day);
+   public void runDay(int day, boolean manual, boolean display, boolean displayTicks) {
+      if (display) System.out.println("Day " + day);
       spawnFood(maxFood);
 
+      // run through all ticks
       for (time = 0; time < dayLength; time++) {
          tick(displayTicks);
          if (manual) {
             ask("Press ENTER to continue");
          }
       }
-      if (!displayTicks) {
+      // display at the end of the day if not displaying ticks
+      if (!displayTicks && display) {
          display();
       }
-      endDay(day);
+      endDay(day, display);
    }
    
    // pre: display -> whether or not to display
@@ -198,8 +204,8 @@ public class EvolutionSim {
 
    // pre: takes in day number for display purposes
    // post: runs all organisms endDay() method and stores data
-   public void endDay(int day) {
-      System.out.println("END OF DAY " + (day + 1) + "\n");
+   public void endDay(int day, boolean display) {
+      if (display) System.out.println("END OF DAY " + (day + 1) + "\n");
       removeAllFood();
       int numOrgs = organisms.size();
       Iterator<Organism> itr = organisms.iterator();
@@ -211,10 +217,11 @@ public class EvolutionSim {
          // Update stats
          vTotal += o.vision;
          rTotal += o.reproduction;
-         o.endDay(itr);
+         o.endDay(itr, display);
       }
       visionAverages.add(vTotal/numOrgs);
       reproAverages.add(rTotal/numOrgs);
+      populationData.add(organisms.size());
       for (Organism n : newOrgs) {
          organisms.add(n);
       }
@@ -261,20 +268,23 @@ public class EvolutionSim {
       for (Organism o : organisms) {
          System.out.println(o.data());
       }
-      // System.out.println("\nVISION:");
-      // System.out.println(visionOutput);
    }
 
    // displays avg vision and reproduction over time
    public void graphData() {
       ask("Press ENTER to see data");
-      for (int i = 0; i < visionAverages.size(); i++) {
-         // Long lines just limit the decimal to 3 places
+      for (int i = 0; i < visionAverages.size(); i += (int) visionAverages.size() / 10) {
+         // Long lines just limit the decimal to 2 places
          System.out.println("Day " + i 
-                           + " | Vision: " + visionAverages.get(i).toString().substring(0, Math.min(visionAverages.get(i).toString().length(), 4))
-                           + " | Reproduction: " + reproAverages.get(i).toString().substring(0, Math.min(reproAverages.get(i).toString().length(), 4))
-                           + " | Population: " + organisms.size());
+                           + " | Vision: " + visionAverages.get(i).toString().substring(0, Math.min(visionAverages.get(i).toString().length(), 3))
+                           + " | Reproduction: " + reproAverages.get(i).toString().substring(0, Math.min(reproAverages.get(i).toString().length(), 3))
+                           + " | Population: " + populationData.get(i));
       }
+      int f = visionAverages.size() - 1; // final day
+      System.out.println("Day " + f 
+                           + " | Vision: " + visionAverages.get(f).toString().substring(0, Math.min(visionAverages.get(f).toString().length(), 4))
+                           + " | Reproduction: " + reproAverages.get(f).toString().substring(0, Math.min(reproAverages.get(f).toString().length(), 4))
+                           + " | Population: " + populationData.get(f).toString());
    }
 
 
@@ -330,7 +340,7 @@ public class EvolutionSim {
       }
       
       // Create new organism with a chance of mutation
-      public Organism reproduce() {
+      public Organism reproduce(boolean display) {
          int v = 0;
          if (rand.nextInt(100) <= VARIANCE) {
             if (rand.nextInt(2) == 0) {
@@ -349,10 +359,12 @@ public class EvolutionSim {
             }
          }
          Organism o = new Organism(x, y, Math.max(0, vision + v), Math.max(0, reproduction + r));
-         System.out.println("[" + symbol + "] reproduced:");
-         System.out.println("Parent: " + data());
-         System.out.println("Child:  " + o.data());
          newOrgs.add(o);
+         if (display) {
+            System.out.println("[" + symbol + "] reproduced:");
+            System.out.println("Parent: " + data());
+            System.out.println("Child:  " + o.data());
+         }
          return o;
       }
       
@@ -447,13 +459,13 @@ public class EvolutionSim {
       }
    
       // die and reproduce
-      public void endDay(Iterator<Organism> itr) {
+      public void endDay(Iterator<Organism> itr, boolean display) {
          if (food < hunger) {
-            die(itr);
+            die(itr, display);
          }
          if (food >= hunger + reproduction) {
             if (rand.nextInt(reproduction + 4) < reproduction) { // r = 0 -> 0 chance, r = 1 -> 1/4, r = 2 -> 2/5...
-               reproduce();
+               reproduce(display);
                
             }
          }
@@ -462,8 +474,8 @@ public class EvolutionSim {
       }
       
       // Remove this organism from the world and delete it
-      public void die(Iterator<Organism> itr) {
-         System.out.println("[" + symbol + "] died - Food: " + food);
+      public void die(Iterator<Organism> itr, boolean display) {
+         if (display) System.out.println("[" + symbol + "] died - Food: " + food);
          freeSymbols.add(symbol);
          currNode.removeOrganism(this);
          itr.remove();
